@@ -1,0 +1,85 @@
+schema_version: 1
+
+# Mosaic-pinned lascopcindex on the private prefix.dev `postprocessing` channel, built from
+# this checkout: upstream LAStools v2.0.5 (6c0279a) plus the commits of the local branch
+# mosaic/keep-wkt-crs (lascopcindex keeps an existing OGC WKT CRS record instead of
+# rebuilding the CRS from GeoTIFF keys, which replaced it by a horizontal-only WKT).
+# conda-forge's `lastools` package is a 2017 build that predates COPC.
+#
+# lascopcindex is in the LGPL-2.1 part of LAStools (LASlib/LASzip + the open tools, see
+# LICENSE.txt). Mosaic Processor runs it as a subprocess, so the LGPL does not extend to
+# the app; the licence text ships in the package's info/licenses, and this repository is
+# the modified source to provide with the binary.
+#
+# Only the lascopcindex target is built (CMake builds LASlib as a static library for it).
+# PROJ is not needed: the open tools dlopen PROJ at runtime only for CRS conversions, which
+# lascopcindex never does.
+#
+# Build (from this directory; the output dir below is where the earlier packages live):
+#   rattler-build build --recipe recipe.yaml --output-dir ../stitching/packaging/lascopcindex/output --target-platform win-64
+#   (linux-64: in WSL, with an --output-dir on the WSL filesystem, then copy the .conda over)
+
+context:
+  version: "2.0.5"
+  commit: 6c0279a
+
+package:
+  name: lascopcindex
+  version: ${{ version }}
+
+source:
+  - path: .
+
+build:
+  number: 1
+  # Build string carries the upstream commit; the build number counts Mosaic's changes:
+  #   lascopcindex=2.0.5=6c0279a_1 (build 1: keep-wkt-crs)
+  string: ${{ commit }}_1
+  script:
+    - if: win
+      then:
+        - cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF
+        - cmake --build build --target lascopcindex --config Release
+        - if not exist "%LIBRARY_BIN%" mkdir "%LIBRARY_BIN%"
+        - copy /Y bin64\lascopcindex64.exe "%LIBRARY_BIN%\lascopcindex.exe"
+      else:
+        - cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF
+        - cmake --build build --target lascopcindex
+        - mkdir -p "$PREFIX/bin"
+        - cp bin64/lascopcindex64 "$PREFIX/bin/lascopcindex"
+        - chmod 0755 "$PREFIX/bin/lascopcindex"
+
+requirements:
+  build:
+    # win: VS 2022 (the default ${{ compiler('cxx') }} pins VS 2017, not installed); linux: gcc.
+    - if: win
+      then:
+        - vs2022_win-64
+      else:
+        - ${{ compiler('c') }}
+        - ${{ compiler('cxx') }}
+    - cmake
+    - ninja
+  run:
+    - if: linux
+      then:
+        - libstdcxx-ng
+        - libgcc-ng
+
+tests:
+  - script:
+      - lascopcindex -version
+
+about:
+  homepage: https://github.com/LAStools/LAStools
+  license: LGPL-2.1-only
+  license_file:
+    - LICENSE.txt
+    - COPYING.txt
+  summary: lascopcindex (LAStools v2.0.5 + Mosaic keep-wkt-crs) - Mosaic-pinned LAS/LAZ to COPC converter
+  description: |
+    lascopcindex from LAStools v2.0.5 with one Mosaic change (an existing OGC WKT CRS
+    record is kept instead of being rebuilt from GeoTIFF keys), compiled from the local
+    Mosaic LAStools checkout. Mosaic Processor calls it as a subprocess to turn merged /
+    colorized / Xplor point clouds into Cloud Optimized Point Cloud (COPC) LAZ files.
+    The tool is in the LGPL-2.1 open-source part of LAStools.

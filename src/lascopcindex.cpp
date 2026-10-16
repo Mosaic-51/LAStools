@@ -1096,8 +1096,9 @@ int main(int argc, char* argv[])
         }
       }
 
-      // convert CRS from GeoTIF to OGC WKT
-      if (lasreader->header.vlr_geo_keys)
+      // convert CRS from GeoTIF to OGC WKT. Mosaic Processor change: only when the file
+      // carries no OGC WKT record yet, so an existing CRS is copied as it is.
+      if (lasreader->header.vlr_geo_keys && !lasreader->header.vlr_geo_ogc_wkt)
       {
         char* ogc_wkt = 0;
         I32 len = 0;
